@@ -15,8 +15,13 @@ pbopt = {"including_default_value_fields": True,
 def iter_posting_batches(reader: Iterable[PostingsList]):
     batch = []
     for tid, p in enumerate(reader.read_postings_lists()):
+        prevdocid = 0
         pp = MessageToDict(p, **pbopt)
         pp['termid']=tid
+        batch.append(pp)
+        # Gap Decompression...
+        pp['postings']=[prev := {"docid":0}] and \
+            [prev := {"docid": posting['docid'] + prev['docid'], "tf": posting['tf']} for posting in pp['postings']]
         batch.append(pp)
         if len(batch) == 4096:
             yield pa.RecordBatch.from_pylist(batch)
