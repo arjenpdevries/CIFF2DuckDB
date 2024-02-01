@@ -18,7 +18,6 @@ def iter_posting_batches(reader: Iterable[PostingsList]):
         prevdocid = 0
         pp = MessageToDict(p, **pbopt)
         pp['termid']=tid
-        batch.append(pp)
         # Gap Decompression...
         pp['postings']=[prev := {"docid":0}] and \
             [prev := {"docid": posting['docid'] + prev['docid'], "tf": posting['tf']} for posting in pp['postings']]
