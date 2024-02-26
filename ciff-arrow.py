@@ -58,7 +58,7 @@ postings_schema = pa.schema([
 
 docs_schema = pa.schema([
     ("docid", pa.int32()),
-    ("collectionDocid", pa.string()),
+    ("collection_docid", pa.string()),
     ("doclength", pa.int32())
      ])
 
@@ -70,8 +70,10 @@ con = duckdb.connect("./ciff.db")
 # Use CIFFReader to create RecordBatches for table (using Arrow)
 with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
     # Header info: TBD
-    header = reader.read_header()
-    print(MessageToJson(header, **pbopt))
+    h = reader.read_header()
+    header = MessageToJson(h, **pbopt)
+    con.execute('CREATE TABLE stats (num_docs BIGINT, avgdl DOUBLE);');
+    con.execute(f'INSERT INTO stats VALUES ({h.num_docs}, {h.average_doclength});');
 
     # RecordBatches for postings to an Arrow Datastructure
     postings_rb = iter_posting_batches(reader)
@@ -88,13 +90,18 @@ with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
 
     # Create a DuckDB table from the Arrow data
     con.execute("""
-      CREATE TABLE ciff_docs AS SELECT * FROM docs_rbr;
+      CREATE TABLE docs AS SELECT docid::BIGINT AS docid, collection_docid AS name, doclength::BIGINT AS len FROM docs_rbr;
     """);
 
 #
 # Transform schema of the postings information (using DuckDB)
+#
+# Note: 
+# Dropping cf here because DuckDB FTS does not use it, should be a CMDLINE option?
+# Simply add cf as follows if needed: ... AS SELECT ...,cf ...
+#
 con.execute("""
-  CREATE TABLE dict AS SELECT termid, term, df, cf FROM ciff_postings;
+  CREATE TABLE dict AS SELECT termid, term, df FROM ciff_postings;
 """);
 con.execute("""
   CREATE TABLE postings AS SELECT termid, unnest(postings, recursive := true) FROM ciff_postings;
