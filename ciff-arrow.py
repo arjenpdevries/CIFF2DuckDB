@@ -8,6 +8,10 @@ from typing import Iterator, TypeVar, Iterable
 
 pbopt = {"including_default_value_fields": True, 
          "preserving_proto_field_name": True}
+
+# TODO: set via cmdline parameter
+SCHEMA = 'ows';
+
 #
 # Generator for reading batches of postings
 #
@@ -66,6 +70,8 @@ docs_schema = pa.schema([
 # Create/open DuckDB database
 con = duckdb.connect("./ciff.db")
 
+con.execute(f'USE {SCHEMA};');
+
 #
 # Use CIFFReader to create RecordBatches for table (using Arrow)
 with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
@@ -107,6 +113,8 @@ con.execute("""
   CREATE TABLE postings AS SELECT termid, unnest(postings, recursive := true) FROM ciff_postings;
 """);
 con.execute("DROP TABLE ciff_postings;")
+
+# TODO: only for testing:
 
 #
 # Query the index using the DuckDB tables
