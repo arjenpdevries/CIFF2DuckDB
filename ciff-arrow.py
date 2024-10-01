@@ -1,3 +1,5 @@
+import click
+
 import duckdb
 import pyarrow as pa
 
@@ -42,87 +44,101 @@ def iter_docs_batches(reader: Iterable[DocRecord]):
             batch = []
     yield pa.RecordBatch.from_pylist(batch)
 
+# Initialize
+def init_schema(con: DuckDBPyConnection):
+  # TODO: add option to, if necessary, execute: 
+  # con.execute(f'DROP SCHEMA {SCHEMA} CASCADE;')
+
+  con.execute(f'CREATE SCHEMA {SCHEMA};')
+  con.execute(f'USE {SCHEMA};')
+
+# TODO: only for testing:
+def test(con: DuckDBPyConnection):
+  #
+  # Query the index using the DuckDB tables
+  results = con.execute("SELECT termid FROM dict WHERE term LIKE '%radboud%' OR term LIKE '%university%'").arrow()
+  print(results)
+  results = con.execute("SELECT * FROM postings WHERE termid IN (select termid FROM dict WHERE term LIKE '%radboud%' OR term LIKE '%university%')").arrow()
+  print(results)
+
 #
 # MAIN:
 #
 
-# 
-# Schema: manually defined 
-# (alternative: protarrow could create the datastructure from the proto definition)
-postings_schema = pa.schema([
-    ("term", pa.string()),
-    ("termid", pa.int64()),
-    ("df", pa.int64()),
-    ("cf", pa.int64()),
-    ("postings", pa.list_(pa.struct([
-        ("docid", pa.int32()),
-        ("tf", pa.int32())
-        ])))
-     ])
+@click.command()
+def main():
 
-docs_schema = pa.schema([
-    ("docid", pa.int32()),
-    ("collection_docid", pa.string()),
-    ("doclength", pa.int32())
-     ])
+  # 
+  # Schema: manually defined 
+  # (alternative: protarrow could create the datastructure from the proto definition)
+  postings_schema = pa.schema([
+      ("term", pa.string()),
+      ("termid", pa.int64()),
+      ("df", pa.int64()),
+      ("cf", pa.int64()),
+      ("postings", pa.list_(pa.struct([
+          ("docid", pa.int32()),
+          ("tf", pa.int32())
+          ])))
+       ])
 
-#
-# Create/open DuckDB database
-con = duckdb.connect("./ciff.db")
+  docs_schema = pa.schema([
+      ("docid", pa.int32()),
+      ("collection_docid", pa.string()),
+      ("doclength", pa.int32())
+       ])
 
-con.execute(f'USE {SCHEMA};');
+  #
+  # Create/open DuckDB database
+  con = duckdb.connect("./ciff.db")
 
-#
-# Use CIFFReader to create RecordBatches for table (using Arrow)
-with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
-    # Header info: TBD
-    h = reader.read_header()
-    header = MessageToJson(h, **pbopt)
-    con.execute('CREATE TABLE stats (num_docs BIGINT, avgdl DOUBLE);');
-    con.execute(f'INSERT INTO stats VALUES ({h.num_docs}, {h.average_doclength});');
+  init_schema(con)
 
-    # RecordBatches for postings to an Arrow Datastructure
-    postings_rb = iter_posting_batches(reader)
-    postings_rbr = pa.ipc.RecordBatchReader.from_batches(postings_schema, postings_rb)
+  #
+  # Use CIFFReader to create RecordBatches for table (using Arrow)
+  with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
+      # Header info: TBD
+      h = reader.read_header()
+      header = MessageToJson(h, **pbopt)
+      con.execute('CREATE TABLE stats (num_docs BIGINT, avgdl DOUBLE);');
+      con.execute(f'INSERT INTO stats VALUES ({h.num_docs}, {h.average_doclength});');
 
-    # Create a DuckDB table from the Arrow data
-    con.execute("""
-      CREATE TABLE ciff_postings AS SELECT * FROM postings_rbr;
-    """);
+      # RecordBatches for postings to an Arrow Datastructure
+      postings_rb = iter_posting_batches(reader)
+      postings_rbr = pa.ipc.RecordBatchReader.from_batches(postings_schema, postings_rb)
 
-    # RecordBatches for docs to an Arrow Datastructure
-    docs_rb = iter_docs_batches(reader)
-    docs_rbr = pa.ipc.RecordBatchReader.from_batches(docs_schema, docs_rb)
+      # Create a DuckDB table from the Arrow data
+      con.execute("""
+        CREATE TABLE ciff_postings AS SELECT * FROM postings_rbr;
+      """);
 
-    # Create a DuckDB table from the Arrow data
-    con.execute("""
-      CREATE TABLE docs AS SELECT docid::BIGINT AS docid, collection_docid AS name, doclength::BIGINT AS len FROM docs_rbr;
-    """);
+      # RecordBatches for docs to an Arrow Datastructure
+      docs_rb = iter_docs_batches(reader)
+      docs_rbr = pa.ipc.RecordBatchReader.from_batches(docs_schema, docs_rb)
 
-#
-# Transform schema of the postings information (using DuckDB)
-#
-# Note: 
-# Dropping cf here because DuckDB FTS does not use it, should be a CMDLINE option?
-# Simply add cf as follows if needed: ... AS SELECT ...,cf ...
-#
-con.execute("""
-  CREATE TABLE dict AS SELECT termid, term, df FROM ciff_postings;
-""");
-con.execute("""
-  CREATE TABLE postings AS SELECT termid, unnest(postings, recursive := true) FROM ciff_postings;
-""");
-con.execute("DROP TABLE ciff_postings;")
+      # Create a DuckDB table from the Arrow data
+      con.execute("""
+        CREATE TABLE docs AS SELECT docid::BIGINT AS docid, collection_docid AS name, doclength::BIGINT AS len FROM docs_rbr;
+      """);
 
-# TODO: only for testing:
+  #
+  # Transform schema of the postings information (using DuckDB)
+  #
+  # Note: 
+  # Dropping cf here because DuckDB FTS does not use it, should be a CMDLINE option?
+  # Simply add cf as follows if needed: ... AS SELECT ...,cf ...
+  #
+  con.execute("""
+    CREATE TABLE dict AS SELECT termid, term, df FROM ciff_postings;
+  """);
+  con.execute("""
+    CREATE TABLE postings AS SELECT termid, unnest(postings, recursive := true) FROM ciff_postings;
+  """);
+  con.execute("DROP TABLE ciff_postings;")
 
-#
-# Query the index using the DuckDB tables
-results = con.execute("SELECT termid FROM dict WHERE term LIKE '%radboud%' OR term LIKE '%university%'").arrow()
-print(results)
-results = con.execute("SELECT * FROM postings WHERE termid IN (select termid FROM dict WHERE term LIKE '%radboud%' OR term LIKE '%university%')").arrow()
-print(results)
+  #
+  # Cleanup
+  con.close()
 
-#
-# Cleanup
-con.close()
+if __name__ == "__main__":
+    main()
