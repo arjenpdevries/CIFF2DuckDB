@@ -8,6 +8,18 @@ from ciff_toolkit.ciff_pb2 import DocRecord, Header, PostingsList
 from google.protobuf.json_format import MessageToJson, MessageToDict
 from typing import Iterator, TypeVar, Iterable
 
+## TODO: 
+##
+## Introduce cmdline parameters for:
+##
+##   database file:     ./ciff.db
+##   input data:        ./index.ciff.gz
+##   batch size:        4096 records
+##   schema:            ows
+##
+## Switch posting representation between with/without gaps
+##
+
 pbopt = {"including_default_value_fields": True, 
          "preserving_proto_field_name": True}
 
@@ -96,7 +108,7 @@ def main():
 
   #
   # Use CIFFReader to create RecordBatches for table (using Arrow)
-  with CiffReader('/export/data/ir/OWS.EU/data/index/index.ciff.gz') as reader:
+  with CiffReader('./index.ciff.gz') as reader:
       # Header info: TBD
       h = reader.read_header()
       header = MessageToJson(h, **pbopt)
