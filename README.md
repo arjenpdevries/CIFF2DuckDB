@@ -24,4 +24,12 @@ Install DuckDB CLI for testing:
 
     python ciff-arrow.py
 
+## Reclaim space
 
+The process executes a few SQL commands after loading the base tables from the Protobuf representation.
+
+The resulting overhead in disk storage can be reduced with a simple command:
+
+    duckdb < reclaim-space.sql
+
+See the [footprint docs](https://duckdb.org/docs/operations_manual/footprint_of_duckdb/reclaiming_space.html).
