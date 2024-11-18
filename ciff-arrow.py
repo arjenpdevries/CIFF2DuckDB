@@ -8,6 +8,8 @@ from ciff_toolkit.ciff_pb2 import DocRecord, Header, PostingsList
 from google.protobuf.json_format import MessageToJson, MessageToDict
 from typing import Iterator, TypeVar, Iterable
 
+DEFAULT_CHUNK_SIZE = 128 * 1024
+
 ## TODO: 
 ##
 ## Introduce cmdline parameters for:
@@ -40,7 +42,7 @@ def iter_posting_batches(reader: Iterable[PostingsList]):
         pp['postings']=[prev := {"docid":0}] and \
             [prev := {"docid": posting['docid'] + prev['docid'], "tf": posting['tf']} for posting in pp['postings']]
         batch.append(pp)
-        if len(batch) == 4096:
+        if len(batch) == DEFAULT_CHUNK_SIZE:
             yield pa.RecordBatch.from_pylist(batch)
             batch = []
     yield pa.RecordBatch.from_pylist(batch)
@@ -51,13 +53,13 @@ def iter_docs_batches(reader: Iterable[DocRecord]):
     batch = []
     for doc in reader.read_documents():
         batch.append(MessageToDict(doc, **pbopt))
-        if len(batch) == 8192:
+        if len(batch) == DEFAULT_CHUNK_SIZE:
             yield pa.RecordBatch.from_pylist(batch)
             batch = []
     yield pa.RecordBatch.from_pylist(batch)
 
 # Initialize
-def init_schema(con: DuckDBPyConnection):
+def init_schema(con: duckdb.DuckDBPyConnection):
   # TODO: add option to, if necessary, execute: 
   # con.execute(f'DROP SCHEMA {SCHEMA} CASCADE;')
 
@@ -65,7 +67,7 @@ def init_schema(con: DuckDBPyConnection):
   con.execute(f'USE {SCHEMA};')
 
 # TODO: only for testing:
-def test(con: DuckDBPyConnection):
+def test(con: duckdb.DuckDBPyConnection):
   #
   # Query the index using the DuckDB tables
   results = con.execute("SELECT termid FROM dict WHERE term LIKE '%radboud%' OR term LIKE '%university%'").arrow()
