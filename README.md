@@ -24,6 +24,10 @@ Install DuckDB CLI for testing:
 
     python ciff-arrow.py
 
+## Optional: remove duplicate documents
+
+    duckdb < dedup-ciff.sql
+
 ## Reclaim space
 
 The process executes a few SQL commands after loading the base tables from the Protobuf representation.
