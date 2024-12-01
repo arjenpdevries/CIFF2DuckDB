@@ -8,7 +8,7 @@
 --    on position could instead take the last document capture.)
 --
 
-create schema fixedciff;
+create schema if not exists ciff;
 use ows;
 
 -- Intermediary table with the data we need to correct the other tables:
@@ -18,7 +18,7 @@ create or replace temporary table tdupdoc as
   from postings group by termid, docid having count(docid)>1;
 
 -- Dictionary with corrected df values
-create or replace table fixedciff.dict as 
+create or replace table ciff.dict as 
   select termid,term,any_value(df) as df from (
     select d.termid, d.term, (df - coalesce(deltadf, 0)) as df 
     from ows.dict d left outer join tdupdoc on (d.termid = tdupdoc.termid) ) 
@@ -27,7 +27,7 @@ create or replace table fixedciff.dict as
 -- Docs without duplicates
 -- Keeping max(len) is an arbitrary choice given the assumptions stated,
 -- but it avoids a length 0 for a document that has postings from another capture.
-create or replace table fixedciff.docs as
+create or replace table ciff.docs as
   select distinct docid, name, max(len) as len from ows.docs 
   group by docid, name;
 
@@ -37,7 +37,7 @@ create or replace table fixedciff.docs as
 -- union these with the postings from duplicate ones;
 -- ensure the order by term identifier.
 --
--- create or replace table fixedciff.postings as 
+-- create or replace table ciff.postings as 
 --  select * from (
 --      select termid, docid, tf from ows.postings p
 --      where not exists (
@@ -52,7 +52,7 @@ create or replace table fixedciff.docs as
 -- Postings without the additional entries of duplicate documents
 -- More efficient alternative 2:
 -- Using group-by to keep only one posting per term-doc pair:
-create or replace table fixedciff.postings as
+create or replace table ciff.postings as
   select termid, docid, any_value(tf)
   from ows.postings group by termid, docid
   order by termid, docid;
