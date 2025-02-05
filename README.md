@@ -20,6 +20,10 @@ Install DuckDB CLI for testing:
     wget https://artifacts.duckdb.org/latest/duckdb-binaries-linux.zip
     unzip -p duckdb-binaries-linux.zip duckdb_cli-linux-amd64.zip | funzip > ./duckdb ; chmod a+rx ./duckdb
 
+### Install requirements
+
+    pip install -r requirements.txt
+
 ## Upload Index
 
     python ciff-arrow.py
